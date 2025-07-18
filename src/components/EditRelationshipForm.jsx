@@ -29,25 +29,30 @@ const EditRelationshipForm = ({ relationship, person, people, onSubmit, onCancel
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [historyHandled, setHistoryHandled] = useState(false)
   const bottomRef = useRef(null)
-  
-  // Prevent back button from exiting app
+
+  // Prevent back button from exiting app - OPTIMIZED
   useEffect(() => {
-    const handleBackButton = (event) => {
-      event.preventDefault();
+    if (historyHandled) return;
+    
+    const handleBackButton = () => {
       onCancel();
     };
     
     window.addEventListener('popstate', handleBackButton);
     
-    // Add history entry to make back button work
-    window.history.pushState(null, null, window.location.pathname);
-    
+    // Only add history entry once
+    if (!historyHandled) {
+      window.history.pushState({ action: 'editRelationship' }, '');
+      setHistoryHandled(true);
+    }
+
     return () => {
       window.removeEventListener('popstate', handleBackButton);
     };
-  }, [onCancel]);
-  
+  }, [onCancel, historyHandled]);
+
   // Scroll to bottom when form opens
   useEffect(() => {
     if (bottomRef.current) {
@@ -59,6 +64,7 @@ const EditRelationshipForm = ({ relationship, person, people, onSubmit, onCancel
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    
     if (!formData.relationshipType) {
       setError('Please select a relationship type')
       return

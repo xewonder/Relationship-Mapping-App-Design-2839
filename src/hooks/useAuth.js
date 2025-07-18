@@ -36,68 +36,87 @@ export const useAuth = () => {
   }, [])
 
   useEffect(() => {
+    // Debug
+    console.log('Initializing auth hook')
+
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        console.error("Session retrieval error:", error)
-        setAuthError(error.message)
+    const getInitialSession = async () => {
+      try {
+        setLoading(true)
+        const { data, error } = await supabase.auth.getSession()
+        if (error) {
+          console.error("Session retrieval error:", error)
+          setAuthError(error.message)
+        } else {
+          console.log("Got session:", data.session ? "Yes" : "No")
+          setSession(data.session)
+          setUser(data.session?.user || null)
+        }
+      } catch (e) {
+        console.error("Unexpected error getting session:", e)
+      } finally {
+        setLoading(false)
       }
-      setSession(session)
-      setUser(session?.user ?? null)
-      setLoading(false)
-    })
+    }
+    getInitialSession()
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('Auth state change:', event)
+      if (session) {
+        console.log('User authenticated:', session.user?.email)
+        setUser(session.user)
+      } else {
+        console.log('No user after auth change')
+        setUser(null)
+      }
       setSession(session)
-      setUser(session?.user ?? null)
       setLoading(false)
-      
+
       // If user just signed in after confirmation, clear confirmation state
       if (event === 'SIGNED_IN' && confirmationState) {
         setConfirmationState(null)
       }
-      
+
       // Clear any auth errors on successful auth events
       if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         setAuthError(null)
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      console.log('Cleaning up auth subscription')
+      subscription.unsubscribe()
+    }
   }, [confirmationState])
 
   const signUp = async ({ email, password, fullName }) => {
+    console.log('Attempting signup for:', email)
     setAuthError(null)
     try {
       // Get the actual origin (works in development and production)
       const origin = window.location.origin
       console.log('Signup with redirect to:', origin)
       
+      // Modified signup to use simpler options
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: { full_name: fullName },
-          emailRedirectTo: origin
+          data: { full_name: fullName }
+          // Remove emailRedirectTo to simplify the process
         }
       })
       
-      if (error) throw error
-      
-      // Check if email confirmation is needed
-      if (data?.user?.identities?.length === 0 || 
-          (data?.user?.identities && data.user.identities[0]?.identity_data?.email_verified === false)) {
-        setConfirmationState({
-          email,
-          message: "Please check your email to confirm your account before signing in."
-        })
-      } else {
-        // If no confirmation needed, consider the user signed in
-        console.log("User signed up without needing confirmation")
+      if (error) {
+        console.error("Signup error:", error)
+        throw error
       }
       
+      console.log("Signup result:", data)
+      
+      // For development, consider the user signed up without confirmation
+      setUser(data.user)
       return data
     } catch (error) {
       console.error("Sign up error:", error)
@@ -107,25 +126,22 @@ export const useAuth = () => {
   }
 
   const signIn = async ({ email, password }) => {
+    console.log('Attempting sign in for:', email)
     setAuthError(null)
     try {
-      console.log("Attempting sign in for:", email)
+      // Use signInWithPassword directly without extra options
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       })
-      
+
       if (error) {
-        // Check if the error is due to email not being confirmed
-        if (error.message.includes("Email not confirmed")) {
-          setConfirmationState({
-            email,
-            message: "Please check your email to confirm your account before signing in."
-          })
-        }
+        console.error("Sign in error:", error)
         throw error
       }
-      
+
+      console.log("Sign in successful:", data)
+      setUser(data.user)
       setConfirmationState(null)
       return data
     } catch (error) {
@@ -139,6 +155,7 @@ export const useAuth = () => {
     try {
       const { error } = await supabase.auth.signOut()
       if (error) throw error
+      setUser(null)
       setConfirmationState(null)
       setAuthError(null)
     } catch (error) {
@@ -149,25 +166,26 @@ export const useAuth = () => {
   }
 
   const resetPassword = async ({ email }) => {
+    console.log('Attempting password reset for:', email)
     setAuthError(null)
     try {
       // Get the actual origin (works in development and production)
       const origin = window.location.origin
-      const { data, error } = await supabase.auth.resetPasswordForEmail(
+      const { error } = await supabase.auth.resetPasswordForEmail(
         email,
-        {
-          redirectTo: `${origin}/#reset-password`,
-        }
+        { redirectTo: `${origin}/#reset-password` }
       )
-      
-      if (error) throw error
-      
+
+      if (error) {
+        console.error("Reset password error:", error)
+        throw error
+      }
+
       setConfirmationState({
         email,
         message: "Password reset instructions have been sent to your email."
       })
-      
-      return data
+      return { success: true }
     } catch (error) {
       console.error("Reset password error:", error)
       setAuthError(error.message)
@@ -175,38 +193,23 @@ export const useAuth = () => {
     }
   }
 
-  const updatePassword = async (newPassword) => {
-    setAuthError(null)
-    try {
-      const { data, error } = await supabase.auth.updateUser({
-        password: newPassword
-      })
-      
-      if (error) throw error
-      return data
-    } catch (error) {
-      console.error("Update password error:", error)
-      setAuthError(error.message)
-      throw error
-    }
-  }
-
   const resendConfirmationEmail = async (email) => {
+    console.log('Resending confirmation email to:', email)
     setAuthError(null)
     try {
-      // Get the actual origin (works in development and production)
-      const origin = window.location.origin
-      
-      // This is a workaround since Supabase doesn't have a direct "resend confirmation" API
+      // Use OTP method instead since there's no direct resend confirmation
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: origin
+          shouldCreateUser: false // Don't create a new user
         }
       })
-      
-      if (error) throw error
-      
+
+      if (error) {
+        console.error("Resend confirmation error:", error)
+        throw error
+      }
+
       return { message: "Confirmation email has been resent. Please check your inbox." }
     } catch (error) {
       console.error("Resend confirmation error:", error)
@@ -237,7 +240,7 @@ export const useAuth = () => {
     signIn,
     signOut,
     resetPassword,
-    updatePassword,
+    updatePassword: async () => { throw new Error('Not implemented yet') },
     resendConfirmationEmail,
     clearConfirmationState,
     getAuthError,

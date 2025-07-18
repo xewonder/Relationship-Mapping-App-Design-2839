@@ -6,7 +6,7 @@ import SafeIcon from '../common/SafeIcon'
 const { FiMail, FiLock, FiUser, FiEye, FiEyeOff, FiArrowRight, FiRefreshCw, FiAlertCircle } = FiIcons
 
 const AuthForm = ({ onAuth, confirmationState, onResendConfirmation, authError }) => {
-  const [mode, setMode] = useState('login') // 'login', 'register', 'forgot'
+  const [mode, setMode] = useState('login') // 'login','register','forgot'
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -56,15 +56,18 @@ const AuthForm = ({ onAuth, confirmationState, onResendConfirmation, authError }
         if (formData.password !== formData.confirmPassword) {
           throw new Error('Passwords do not match')
         }
-        
+
         if (formData.password.length < 6) {
           throw new Error('Password must be at least 6 characters')
         }
-        
+
         await onAuth('register', {
           email: formData.email,
           password: formData.password,
-          fullName: formData.fullName
+          fullName: formData.fullName,
+          options: {
+            emailRedirectTo: window.location.origin
+          }
         })
       } else if (mode === 'login') {
         await onAuth('login', {
@@ -72,11 +75,18 @@ const AuthForm = ({ onAuth, confirmationState, onResendConfirmation, authError }
           password: formData.password
         })
       } else if (mode === 'forgot') {
-        await onAuth('forgot', { email: formData.email })
+        await onAuth('forgot', {
+          email: formData.email
+        })
         setMessage('Password reset email sent! Check your inbox.')
       }
     } catch (error) {
-      setMessage(error.message)
+      // Handle database error specially
+      if (error.message?.includes('Database error')) {
+        setMessage('Server configuration issue. Please try again later or contact support.')
+      } else {
+        setMessage(error.message || 'Authentication failed')
+      }
     } finally {
       setLoading(false)
     }
@@ -142,7 +152,7 @@ const AuthForm = ({ onAuth, confirmationState, onResendConfirmation, authError }
               <span className="font-medium text-red-800">Authentication Error</span>
             </div>
             <p className="text-red-700 mb-2">{message}</p>
-            <button 
+            <button
               onClick={handleResendConfirmation}
               disabled={loading || !formData.email}
               className="text-sm text-blue-600 hover:text-blue-800 flex items-center disabled:opacity-50"
@@ -157,7 +167,7 @@ const AuthForm = ({ onAuth, confirmationState, onResendConfirmation, authError }
         {confirmationState && !urlError && (
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <p className="text-yellow-800 mb-2">{confirmationState.message}</p>
-            <button 
+            <button
               onClick={handleResendConfirmation}
               disabled={loading}
               className="text-sm text-blue-600 hover:text-blue-800 flex items-center"
@@ -256,8 +266,8 @@ const AuthForm = ({ onAuth, confirmationState, onResendConfirmation, authError }
 
           {message && !confirmationState && !urlError && (
             <div className={`p-3 rounded-lg text-sm ${
-              message.includes('sent') || message.includes('success') 
-                ? 'bg-green-50 text-green-700 border border-green-200' 
+              message.includes('sent') || message.includes('success')
+                ? 'bg-green-50 text-green-700 border border-green-200'
                 : 'bg-red-50 text-red-700 border border-red-200'
             }`}>
               {message}

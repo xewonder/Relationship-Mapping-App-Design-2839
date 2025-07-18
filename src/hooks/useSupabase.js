@@ -1,6 +1,6 @@
-import {useState, useEffect} from 'react'
-import {supabase} from '../config/supabase'
-import {getRelationshipBasedOnSex, getOppositeRelationship, getBaseRelationshipType} from '../utils/relationshipMappings'
+import { useState, useEffect } from 'react'
+import { supabase } from '../config/supabase'
+import { getRelationshipBasedOnSex, getOppositeRelationship, getBaseRelationshipType } from '../utils/relationshipMappings'
 
 // People hook
 export const usePeople = () => {
@@ -12,17 +12,22 @@ export const usePeople = () => {
     try {
       setLoading(true)
       setError(null)
-
-      const {data: {user}} = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       const userId = user?.id || 'anonymous' // Fallback for development
+      console.log('Fetching people for user:', userId)
 
-      const {data, error} = await supabase
+      const { data, error } = await supabase
         .from('people_tracker_2024')
         .select('*')
         .eq('user_id', userId)
         .order('name')
 
-      if (error) throw error
+      if (error) {
+        console.error('Database error:', error)
+        throw error
+      }
+
+      console.log('Fetched people:', data?.length || 0)
       setPeople(data || [])
       return data || []
     } catch (err) {
@@ -38,8 +43,7 @@ export const usePeople = () => {
     try {
       setLoading(true)
       setError(null)
-
-      const {data: {user}} = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       const userId = user?.id || 'anonymous' // Fallback for development
 
       // Split the query into individual words and create search patterns
@@ -58,7 +62,7 @@ export const usePeople = () => {
       console.log('Search words:', words)
       console.log('Search conditions:', searchConditions)
 
-      const {data, error} = await supabase
+      const { data, error } = await supabase
         .from('people_tracker_2024')
         .select('*')
         .eq('user_id', userId)
@@ -90,13 +94,13 @@ export const usePeople = () => {
       const fileName = `${personId}_${Date.now()}.${fileExt}`
       const filePath = `photos/${fileName}`
 
-      const {error: uploadError} = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('person-photos')
         .upload(filePath, file)
 
       if (uploadError) throw uploadError
 
-      const {data: {publicUrl}} = supabase.storage
+      const { data: { publicUrl } } = supabase.storage
         .from('person-photos')
         .getPublicUrl(filePath)
 
@@ -112,31 +116,31 @@ export const usePeople = () => {
       setLoading(true)
       setError(null)
 
-      const {data: {user}} = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       const userId = user?.id || 'anonymous' // Fallback for development
 
       // Prepare the data without the photo file
-      const {photoFile, ...dataToInsert} = personData
+      const { photoFile, ...dataToInsert } = personData
       dataToInsert.user_id = userId
 
       // CRITICAL FIX: Ensure proximity value has the correct case (Title Case)
       // This prevents the database constraint violation
-      const validProximities = ['Close', 'Medium', 'Far'];
+      const validProximities = ['Close', 'Medium', 'Far']
       if (!validProximities.includes(dataToInsert.proximity)) {
-        dataToInsert.proximity = 'Medium'; // Default value with proper case
+        dataToInsert.proximity = 'Medium' // Default value with proper case
       }
 
-      console.log("Adding person with data:", dataToInsert);
+      console.log("Adding person with data:", dataToInsert)
 
       // First insert the person to get the ID
-      const {data, error} = await supabase
+      const { data, error } = await supabase
         .from('people_tracker_2024')
         .insert([dataToInsert])
         .select()
 
       if (error) {
-        console.error("Insert error:", error);
-        throw error;
+        console.error("Insert error:", error)
+        throw error
       }
 
       if (!data || data.length === 0) {
@@ -149,10 +153,10 @@ export const usePeople = () => {
       if (photoFile) {
         try {
           const photoUrl = await uploadPhoto(photoFile, finalPerson.id)
-
-          const {data: updatedData, error: updateError} = await supabase
+          
+          const { data: updatedData, error: updateError } = await supabase
             .from('people_tracker_2024')
-            .update({photo_url: photoUrl})
+            .update({ photo_url: photoUrl })
             .eq('id', finalPerson.id)
             .select()
 
@@ -164,7 +168,9 @@ export const usePeople = () => {
         }
       }
 
+      // Update the local state with the new person
       setPeople(prev => [...prev, finalPerson])
+      
       return finalPerson
     } catch (err) {
       console.error('Error adding person:', err)
@@ -180,21 +186,21 @@ export const usePeople = () => {
       setLoading(true)
       setError(null)
 
-      const {data: {user}} = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       const userId = user?.id || 'anonymous' // Fallback for development
 
       // Prepare the data without the photo file
-      const {photoFile, ...dataToUpdate} = personData
+      const { photoFile, ...dataToUpdate } = personData
       dataToUpdate.updated_at = new Date().toISOString()
 
       // CRITICAL FIX: Ensure proximity value has the correct case (Title Case)
       // This prevents the database constraint violation
-      const validProximities = ['Close', 'Medium', 'Far'];
+      const validProximities = ['Close', 'Medium', 'Far']
       if (!validProximities.includes(dataToUpdate.proximity)) {
-        dataToUpdate.proximity = 'Medium'; // Default value with proper case
+        dataToUpdate.proximity = 'Medium' // Default value with proper case
       }
 
-      console.log("Updating person with data:", dataToUpdate);
+      console.log("Updating person with data:", dataToUpdate)
 
       // If there's a photo file, upload it first
       if (photoFile) {
@@ -207,7 +213,7 @@ export const usePeople = () => {
         }
       }
 
-      const {data, error} = await supabase
+      const { data, error } = await supabase
         .from('people_tracker_2024')
         .update(dataToUpdate)
         .eq('id', id)
@@ -215,8 +221,8 @@ export const usePeople = () => {
         .select()
 
       if (error) {
-        console.error("Update error:", error);
-        throw error;
+        console.error("Update error:", error)
+        throw error
       }
 
       if (!data || data.length === 0) {
@@ -239,10 +245,10 @@ export const usePeople = () => {
       setLoading(true)
       setError(null)
 
-      const {data: {user}} = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       const userId = user?.id || 'anonymous' // Fallback for development
 
-      const {error} = await supabase
+      const { error } = await supabase
         .from('people_tracker_2024')
         .delete()
         .eq('id', id)
@@ -260,7 +266,16 @@ export const usePeople = () => {
     }
   }
 
-  return {people, loading, error, fetchPeople, searchPeople, addPerson, updatePerson, deletePerson}
+  return {
+    people,
+    loading,
+    error,
+    fetchPeople,
+    searchPeople,
+    addPerson,
+    updatePerson,
+    deletePerson
+  }
 }
 
 // Relationships hook with improved error handling
@@ -274,7 +289,7 @@ export const useRelationships = () => {
       setLoading(true)
       setError(null)
 
-      const {data: {user}} = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       const userId = user?.id || 'anonymous' // Fallback for development
 
       let query = supabase
@@ -290,14 +305,14 @@ export const useRelationships = () => {
         query = query.or(`person_a_id.eq.${personId},person_b_id.eq.${personId}`)
       }
 
-      const {data, error} = await query
+      const { data, error } = await query
 
       if (error) {
-        console.error("Database error:", error);
-        throw error;
+        console.error("Database error:", error)
+        throw error
       }
 
-      console.log("Fetched relationships:", data);
+      console.log("Fetched relationships:", data)
       setRelationships(data || [])
       return data || []
     } catch (error) {
@@ -315,29 +330,23 @@ export const useRelationships = () => {
       setLoading(true)
       setError(null)
 
-      const {data: {user}} = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       const userId = user?.id || 'anonymous' // Fallback for development
 
-      console.log('Adding relationship:', {
-        currentPersonId,
-        otherPersonId,
-        relationshipTypeOfOtherPerson: relationshipTypeOfOtherPerson,
-        userId
-      })
+      console.log('Adding relationship:', { currentPersonId, otherPersonId, relationshipTypeOfOtherPerson: relationshipTypeOfOtherPerson, userId })
 
       // Get both people's details
-      const {data: peopleData, error: peopleError} = await supabase
+      const { data: peopleData, error: peopleError } = await supabase
         .from('people_tracker_2024')
         .select('id,name,sex')
         .in('id', [currentPersonId, otherPersonId])
 
       if (peopleError) {
-        console.error("People fetch error:", peopleError);
-        throw peopleError;
+        console.error("People fetch error:", peopleError)
+        throw peopleError
       }
 
-      console.log("People data:", peopleData);
-
+      console.log("People data:", peopleData)
       const currentPerson = peopleData.find(p => p.id === currentPersonId)
       const otherPerson = peopleData.find(p => p.id === otherPersonId)
 
@@ -352,17 +361,17 @@ export const useRelationships = () => {
       // FIXED LOGIC:
       // - relationshipTypeOfOtherPerson = what the OTHER person is to the CURRENT person
       // - We need to find what the CURRENT person is to the OTHER person (opposite)
-      const oppositeBaseType = getOppositeRelationship(relationshipTypeOfOtherPerson, null);
-      console.log('What current person is to other person (base):', oppositeBaseType);
+      const oppositeBaseType = getOppositeRelationship(relationshipTypeOfOtherPerson, null)
+      console.log('What current person is to other person (base):', oppositeBaseType)
 
       // Apply sex-specific transformations
       // What the OTHER person is to the CURRENT person (based on other person's sex)
-      const otherToCurrentRelationship = getRelationshipBasedOnSex(relationshipTypeOfOtherPerson, otherPerson.sex);
+      const otherToCurrentRelationship = getRelationshipBasedOnSex(relationshipTypeOfOtherPerson, otherPerson.sex)
       // What the CURRENT person is to the OTHER person (based on current person's sex)
-      const currentToOtherRelationship = getRelationshipBasedOnSex(oppositeBaseType, currentPerson.sex);
+      const currentToOtherRelationship = getRelationshipBasedOnSex(oppositeBaseType, currentPerson.sex)
 
-      console.log('Other person to current person (specific):', otherToCurrentRelationship);
-      console.log('Current person to other person (specific):', currentToOtherRelationship);
+      console.log('Other person to current person (specific):', otherToCurrentRelationship)
+      console.log('Current person to other person (specific):', currentToOtherRelationship)
 
       // Store the relationship with current person as person_a and other person as person_b
       const relationshipData = {
@@ -376,14 +385,14 @@ export const useRelationships = () => {
       console.log('Final relationship data:', relationshipData)
 
       // Insert the new relationship
-      const {data, error} = await supabase
+      const { data, error } = await supabase
         .from('relationships_tracker_2024')
         .insert([relationshipData])
         .select()
 
       if (error) {
-        console.error("Insert error:", error);
-        throw error;
+        console.error("Insert error:", error)
+        throw error
       }
 
       if (!data || data.length === 0) {
@@ -395,7 +404,6 @@ export const useRelationships = () => {
       // Update local state
       const newRelationship = data[0]
       setRelationships(prev => [...prev, newRelationship])
-
       return newRelationship
     } catch (error) {
       console.error('Error adding relationship:', error)
@@ -412,13 +420,13 @@ export const useRelationships = () => {
       setLoading(true)
       setError(null)
 
-      const {data: {user}} = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       const userId = user?.id || 'anonymous' // Fallback for development
 
-      console.log('Updating relationship:', {relationshipId, updateData})
+      console.log('Updating relationship:', { relationshipId, updateData })
 
       // Get the existing relationship
-      const {data: existingRel, error: fetchError} = await supabase
+      const { data: existingRel, error: fetchError } = await supabase
         .from('relationships_tracker_2024')
         .select(`
           *,
@@ -430,8 +438,8 @@ export const useRelationships = () => {
         .single()
 
       if (fetchError) {
-        console.error("Fetch error:", fetchError);
-        throw fetchError;
+        console.error("Fetch error:", fetchError)
+        throw fetchError
       }
 
       if (!existingRel) {
@@ -444,14 +452,14 @@ export const useRelationships = () => {
       console.log('New relationship type (what B is to A):', updateData.relationshipType)
 
       // FIXED: The updateData.relationshipType represents what person B is to person A
-      const oppositeBaseType = getOppositeRelationship(updateData.relationshipType, null);
-      console.log('What person A is to person B (base):', oppositeBaseType);
+      const oppositeBaseType = getOppositeRelationship(updateData.relationshipType, null)
+      console.log('What person A is to person B (base):', oppositeBaseType)
 
       // Apply sex-specific transformations
       // What person B is to person A (based on person B's sex)
-      const personBToPersonA = getRelationshipBasedOnSex(updateData.relationshipType, existingRel.person_b.sex);
+      const personBToPersonA = getRelationshipBasedOnSex(updateData.relationshipType, existingRel.person_b.sex)
       // What person A is to person B (based on person A's sex)
-      const personAToPersonB = getRelationshipBasedOnSex(oppositeBaseType, existingRel.person_a.sex);
+      const personAToPersonB = getRelationshipBasedOnSex(oppositeBaseType, existingRel.person_a.sex)
 
       console.log('Person A to Person B (specific):', personAToPersonB)
       console.log('Person B to Person A (specific):', personBToPersonA)
@@ -466,7 +474,7 @@ export const useRelationships = () => {
       console.log('Update object:', updateObj)
 
       // Update the relationship
-      const {data, error} = await supabase
+      const { data, error } = await supabase
         .from('relationships_tracker_2024')
         .update(updateObj)
         .eq('id', relationshipId)
@@ -474,8 +482,8 @@ export const useRelationships = () => {
         .select()
 
       if (error) {
-        console.error("Update error:", error);
-        throw error;
+        console.error("Update error:", error)
+        throw error
       }
 
       if (!data || data.length === 0) {
@@ -487,7 +495,6 @@ export const useRelationships = () => {
       // Update local state
       const updatedRelationship = data[0]
       setRelationships(prev => prev.map(r => r.id === relationshipId ? updatedRelationship : r))
-
       return updatedRelationship
     } catch (error) {
       console.error('Error updating relationship:', error)
@@ -503,18 +510,18 @@ export const useRelationships = () => {
       setLoading(true)
       setError(null)
 
-      const {data: {user}} = await supabase.auth.getUser()
+      const { data: { user } } = await supabase.auth.getUser()
       const userId = user?.id || 'anonymous' // Fallback for development
 
-      const {error} = await supabase
+      const { error } = await supabase
         .from('relationships_tracker_2024')
         .delete()
         .eq('id', relationshipId)
         .eq('user_id', userId)
 
       if (error) {
-        console.error("Delete error:", error);
-        throw error;
+        console.error("Delete error:", error)
+        throw error
       }
 
       // Update local state
@@ -528,5 +535,13 @@ export const useRelationships = () => {
     }
   }
 
-  return {relationships, loading, error, fetchRelationships, addRelationship, updateRelationship, deleteRelationship}
+  return {
+    relationships,
+    loading,
+    error,
+    fetchRelationships,
+    addRelationship,
+    updateRelationship,
+    deleteRelationship
+  }
 }

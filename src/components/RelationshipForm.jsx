@@ -7,62 +7,66 @@ import PersonForm from './PersonForm'
 const { FiSave, FiX, FiPlus, FiUser, FiSearch, FiEdit, FiFilter } = FiIcons
 
 const relationshipOptions = [
-  {type: 'sibling', label: 'Sibling'},
-  {type: 'spouse', label: 'Spouse'},
-  {type: 'ex_spouse', label: 'Ex-Spouse'},
-  {type: 'parent', label: 'Parent'},
-  {type: 'child', label: 'Child'},
-  {type: 'grandparent', label: 'Grandparent'},
-  {type: 'grandchild', label: 'Grandchild'},
-  {type: 'parental_sibling', label: 'Aunt/Uncle'},
-  {type: 'sibling_child', label: 'Niece/Nephew'},
-  {type: 'friend', label: 'Friend'},
-  {type: 'colleague', label: 'Colleague'},
-  {type: 'boss', label: 'Boss'},
-  {type: 'employee', label: 'Employee'}
+  { type: 'sibling', label: 'Sibling' },
+  { type: 'spouse', label: 'Spouse' },
+  { type: 'ex_spouse', label: 'Ex-Spouse' },
+  { type: 'parent', label: 'Parent' },
+  { type: 'child', label: 'Child' },
+  { type: 'grandparent', label: 'Grandparent' },
+  { type: 'grandchild', label: 'Grandchild' },
+  { type: 'parental_sibling', label: 'Aunt/Uncle' },
+  { type: 'sibling_child', label: 'Niece/Nephew' },
+  { type: 'friend', label: 'Friend' },
+  { type: 'colleague', label: 'Colleague' },
+  { type: 'boss', label: 'Boss' },
+  { type: 'employee', label: 'Employee' }
 ]
 
-const RelationshipForm = ({person, people, existingRelationships = [], onSubmit, onCancel, onAddPerson}) => {
-  const [relationships, setRelationships] = useState([{
-    relatedPersonId: '',
-    relationshipType: '',
-    showSearch: true
-  }])
+const RelationshipForm = ({ person, people, existingRelationships = [], onSubmit, onCancel, onAddPerson }) => {
+  const [relationships, setRelationships] = useState([{ relatedPersonId: '', relationshipType: '', showSearch: true }])
   const [showAddPersonForm, setShowAddPersonForm] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [activeSearchIndex, setActiveSearchIndex] = useState(0) // Track which relationship is being searched
   const [peopleFilter, setPeopleFilter] = useState('all')
   const [showFilters, setShowFilters] = useState(false)
   const [allAvailablePeople, setAllAvailablePeople] = useState([])
-  
+  const [historyHandled, setHistoryHandled] = useState(false)
   const bottomRef = useRef(null)
   const formRef = useRef(null)
 
-  // Prevent back button from exiting app
+  // Prevent back button from exiting app - OPTIMIZED
   useEffect(() => {
-    const handleBackButton = (event) => {
-      event.preventDefault();
+    if (historyHandled) return;
+    
+    const handleBackButton = () => {
       onCancel();
     };
+    
     window.addEventListener('popstate', handleBackButton);
-    window.history.pushState(null, null, window.location.pathname);
+    
+    // Only add history entry once
+    if (!historyHandled) {
+      window.history.pushState({ action: 'relationshipForm' }, '');
+      setHistoryHandled(true);
+    }
+
     return () => {
       window.removeEventListener('popstate', handleBackButton);
     };
-  }, [onCancel]);
+  }, [onCancel, historyHandled]);
 
   // Initialize available people
   useEffect(() => {
     const existingPersonIds = existingRelationships.map(rel => 
-      rel.person_a_id === person.id ? rel.person_b_id : rel.person_a_id
+      rel.person_a_id === person.id ? rel.person_b_id : rel.person_a_id 
     );
     
     const filtered = people.filter(p => 
-      p.id !== person.id && !existingPersonIds.includes(p.id)
+      p.id !== person.id && !existingPersonIds.includes(p.id) 
     );
     
     const sorted = filtered.sort((a, b) => {
-      const proximityOrder = {close: 1, medium: 2, far: 3};
+      const proximityOrder = { close: 1, medium: 2, far: 3 };
       const aOrder = proximityOrder[(a.proximity || 'medium').toLowerCase()] || 2;
       const bOrder = proximityOrder[(b.proximity || 'medium').toLowerCase()] || 2;
       return aOrder - bOrder;
@@ -75,7 +79,7 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
   useEffect(() => {
     if (bottomRef.current) {
       setTimeout(() => {
-        bottomRef.current.scrollIntoView({behavior: 'smooth'});
+        bottomRef.current.scrollIntoView({ behavior: 'smooth' });
       }, 100);
     }
   }, [relationships.length]);
@@ -103,11 +107,8 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
   const availablePeople = getAvailablePeople();
 
   const addRelationshipRow = () => {
-    setRelationships([...relationships, {
-      relatedPersonId: '',
-      relationshipType: '',
-      showSearch: true
-    }]);
+    setRelationships([...relationships, { relatedPersonId: '', relationshipType: '', showSearch: true }]);
+    
     // Move search focus to the new row
     setActiveSearchIndex(relationships.length);
     setSearchTerm('');
@@ -122,36 +123,45 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
       const newIndex = Math.max(0, activeSearchIndex - 1);
       setActiveSearchIndex(newIndex);
     }
+    
     setSearchTerm('');
   }
 
   const updateRelationship = (index, field, value) => {
     const updated = relationships.map((rel, i) => {
       if (i === index) {
-        const updatedRel = {...rel, [field]: value};
+        const updatedRel = { ...rel, [field]: value };
+        
         if (field === 'relatedPersonId' && value) {
           updatedRel.showSearch = false;
+          
           // Move search to next empty relationship
           const nextEmptyIndex = relationships.findIndex((r, idx) => idx > index && !r.relatedPersonId);
+          
           if (nextEmptyIndex !== -1) {
             setActiveSearchIndex(nextEmptyIndex);
           } else {
             // If no empty relationships, add a new one
             addRelationshipRow();
           }
+          
           setSearchTerm('');
         }
+        
         return updatedRel;
       }
+      
       return rel;
     });
+    
     setRelationships(updated);
   }
 
   const toggleSearch = (index) => {
     const updated = relationships.map((rel, i) => 
-      i === index ? {...rel, showSearch: !rel.showSearch} : rel
+      i === index ? { ...rel, showSearch: !rel.showSearch } : rel 
     );
+    
     setRelationships(updated);
     setActiveSearchIndex(index);
     setSearchTerm('');
@@ -159,9 +169,11 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
     const validRelationships = relationships.filter(rel => 
-      rel.relatedPersonId && rel.relationshipType
+      rel.relatedPersonId && rel.relationshipType 
     );
+    
     if (validRelationships.length > 0) {
       onSubmit(validRelationships);
     }
@@ -173,6 +185,7 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
       setShowAddPersonForm(false);
       
       const emptyIndex = relationships.findIndex(rel => !rel.relatedPersonId);
+      
       if (emptyIndex >= 0) {
         updateRelationship(emptyIndex, 'relatedPersonId', newPerson.id);
       }
@@ -198,39 +211,40 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
 
   const getPersonById = (personId) => {
     let foundPerson = availablePeople.find(p => p.id === personId);
+    
     if (!foundPerson && personId) {
       foundPerson = allAvailablePeople.find(p => p.id === personId);
     }
+    
     return foundPerson;
   }
 
   if (showAddPersonForm) {
     return (
-      <PersonForm 
-        onSubmit={handleAddNewPerson} 
-        onCancel={() => setShowAddPersonForm(false)} 
+      <PersonForm
+        onSubmit={handleAddNewPerson}
+        onCancel={() => setShowAddPersonForm(false)}
       />
     )
   }
 
   return (
     <motion.div
-      initial={{opacity: 0, y: 20}}
-      animate={{opacity: 1, y: 0}}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
       className="bg-white rounded-lg shadow-lg p-4 sm:p-6 max-w-lg w-full mx-2 sm:mx-0 max-h-[90vh] overflow-y-auto"
       ref={formRef}
     >
       <h2 className="text-xl font-bold text-gray-800 mb-6">
         Add Relationships for {person.name}
       </h2>
-      
+
       <div className="mb-4 p-4 bg-blue-50 rounded-lg">
         <p className="text-sm text-blue-800">
-          <strong>How to use:</strong> Select what the other person is to <strong>{person.name}</strong>. 
-          For example, if you're adding {person.name}'s father, select "Parent".
+          <strong>How to use:</strong> Select what the other person is to <strong>{person.name}</strong>. For example, if you're adding {person.name}'s father, select "Parent".
         </p>
       </div>
-      
+
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Filters */}
         <div className="mb-4">
@@ -253,10 +267,8 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
                     type="button"
                     onClick={() => setPeopleFilter(filter)}
                     className={`px-3 py-1 rounded-md text-xs font-medium capitalize transition-colors ${
-                      peopleFilter === filter 
-                        ? filter === 'all' 
-                          ? 'bg-gray-700 text-white' 
-                          : getProximityColor(filter) 
+                      peopleFilter === filter
+                        ? filter === 'all' ? 'bg-gray-700 text-white' : getProximityColor(filter)
                         : 'bg-gray-200 text-gray-700'
                     }`}
                   >
@@ -267,7 +279,7 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
             </div>
           )}
         </div>
-        
+
         {relationships.map((relationship, index) => {
           const selectedPerson = getPersonById(relationship.relatedPersonId);
           const isActiveSearch = index === activeSearchIndex;
@@ -286,8 +298,9 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
                   </button>
                 )}
               </div>
-              
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+              <div className="grid grid-cols-1 gap-3">
+                {/* Person selection - Full width */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Person
@@ -319,7 +332,7 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <div className="flex space-x-2">
+                        <div className="flex items-center space-x-2">
                           <select
                             value={relationship.relatedPersonId}
                             onChange={(e) => updateRelationship(index, 'relatedPersonId', e.target.value)}
@@ -340,7 +353,7 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
                           <button
                             type="button"
                             onClick={() => setShowAddPersonForm(true)}
-                            className="bg-green-600 text-white px-3 py-2 rounded-md hover:bg-green-700 transition-colors"
+                            className="bg-green-600 text-white px-3 py-2 rounded-md hover:bg-green-700 transition-colors flex-shrink-0"
                             title="Add new person"
                           >
                             <SafeIcon icon={FiPlus} />
@@ -350,9 +363,9 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
                         {/* Only show search box for active relationship */}
                         {isActiveSearch && (
                           <div className="relative">
-                            <SafeIcon 
-                              icon={FiSearch} 
-                              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" 
+                            <SafeIcon
+                              icon={FiSearch}
+                              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
                             />
                             <input
                               type="text"
@@ -373,7 +386,8 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
                     )}
                   </div>
                 </div>
-                
+
+                {/* Relationship type - Full width */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     What are they to {person.name}?
@@ -394,9 +408,9 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
                 </div>
               </div>
             </div>
-          );
+          )
         })}
-        
+
         <button
           type="button"
           onClick={addRelationshipRow}
@@ -405,7 +419,7 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
           <SafeIcon icon={FiPlus} />
           <span>Add Another Relationship</span>
         </button>
-        
+
         <div className="flex space-x-3 pt-4" ref={bottomRef}>
           <button
             type="submit"
@@ -414,7 +428,6 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
             <SafeIcon icon={FiSave} />
             <span>Save Relationships</span>
           </button>
-          
           <button
             type="button"
             onClick={onCancel}
@@ -426,7 +439,7 @@ const RelationshipForm = ({person, people, existingRelationships = [], onSubmit,
         </div>
       </form>
     </motion.div>
-  );
+  )
 }
 
-export default RelationshipForm;
+export default RelationshipForm

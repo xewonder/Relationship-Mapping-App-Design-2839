@@ -15,45 +15,37 @@ const DatabaseSetup = ({ onSetupComplete }) => {
     setStatus('Creating tables...')
 
     try {
-      // Run the SQL commands directly instead of using RPC functions
-      // Create people table
-      const { error: peopleTableError } = await supabase.query(`
-        CREATE TABLE IF NOT EXISTS people_tracker_2024 (
-          id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-          name TEXT NOT NULL,
-          sex TEXT CHECK (sex IN ('male','female','other')) DEFAULT 'male',
-          nicknames TEXT,
-          notes TEXT,
-          proximity TEXT CHECK (proximity IN ('Close','Medium','Far')) DEFAULT 'Medium',
-          photo_url TEXT,
-          user_id UUID NOT NULL,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-        );
-      `)
+      // Run the SQL commands directly using the raw query method
+      const { error: peopleTableError } = await supabase.from('people_tracker_2024')
+        .select('id')
+        .limit(1)
+        .then(async result => {
+          if (result.error) {
+            // Table doesn't exist, create it
+            return await supabase.rpc('create_people_table')
+          }
+          return { error: null }
+        })
 
       if (peopleTableError) {
-        console.error('Error creating people table:', peopleTableError)
+        console.error('Error checking/creating people table:', peopleTableError)
         throw peopleTableError
       }
 
       // Create relationships table
-      const { error: relTableError } = await supabase.query(`
-        CREATE TABLE IF NOT EXISTS relationships_tracker_2024 (
-          id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-          person_a_id UUID REFERENCES people_tracker_2024(id) ON DELETE CASCADE,
-          person_b_id UUID REFERENCES people_tracker_2024(id) ON DELETE CASCADE,
-          relationship_type TEXT NOT NULL,
-          relationship_type_b TEXT NOT NULL,
-          user_id UUID NOT NULL,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-          UNIQUE(person_a_id, person_b_id, user_id)
-        );
-      `)
+      const { error: relTableError } = await supabase.from('relationships_tracker_2024')
+        .select('id')
+        .limit(1)
+        .then(async result => {
+          if (result.error) {
+            // Table doesn't exist, create it
+            return await supabase.rpc('create_relationships_table')
+          }
+          return { error: null }
+        })
 
       if (relTableError) {
-        console.error('Error creating relationships table:', relTableError)
+        console.error('Error checking/creating relationships table:', relTableError)
         throw relTableError
       }
 
@@ -91,7 +83,7 @@ const DatabaseSetup = ({ onSetupComplete }) => {
           <p className="text-gray-600 mb-4">
             Click the button below to create the necessary database tables automatically:
           </p>
-          
+
           <button
             onClick={createTables}
             disabled={isCreating}
@@ -109,7 +101,7 @@ const DatabaseSetup = ({ onSetupComplete }) => {
               </>
             )}
           </button>
-          
+
           {status && (
             <div className={`mt-4 p-3 rounded-lg ${status.includes('Error') ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
               <div className="flex items-center space-x-2">

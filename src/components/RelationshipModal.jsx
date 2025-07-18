@@ -14,20 +14,22 @@ const RelationshipModal = ({ person, people, onClose, onAddPerson }) => {
   const [relationships, setRelationships] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  
+  const [historyHandled, setHistoryHandled] = useState(false)
   const { fetchRelationships, addRelationship, deleteRelationship, updateRelationship } = useRelationships()
-  
-  // Prevent back button from exiting app
+
+  // Prevent back button from exiting app - OPTIMIZED
   useEffect(() => {
+    if (historyHandled) return;
+    
     const handleBackButton = (event) => {
-      event.preventDefault();
-      
       if (showForm) {
+        event.preventDefault();
         setShowForm(false);
         return;
       }
       
       if (editingRelationship) {
+        event.preventDefault();
         setEditingRelationship(null);
         return;
       }
@@ -37,13 +39,16 @@ const RelationshipModal = ({ person, people, onClose, onAddPerson }) => {
     
     window.addEventListener('popstate', handleBackButton);
     
-    // Add history entry to make back button work
-    window.history.pushState(null, null, window.location.pathname);
-    
+    // Only add history entry once
+    if (!historyHandled) {
+      window.history.pushState({ action: 'relationshipModal' }, '');
+      setHistoryHandled(true);
+    }
+
     return () => {
       window.removeEventListener('popstate', handleBackButton);
     };
-  }, [onClose, showForm, editingRelationship]);
+  }, [onClose, showForm, editingRelationship, historyHandled]);
 
   useEffect(() => {
     if (person) {
@@ -77,10 +82,7 @@ const RelationshipModal = ({ person, people, onClose, onAddPerson }) => {
       }
       
       await loadRelationships() // Reload relationships
-      setShowForm(false)
-      
-      // Add history entry to handle back button
-      window.history.pushState(null, null, window.location.pathname);
+      setShowForm(false) // Close form
     } catch (err) {
       console.error('Error adding relationships:', err)
       setError(err.message)
@@ -94,13 +96,9 @@ const RelationshipModal = ({ person, people, onClose, onAddPerson }) => {
       setLoading(true)
       setError(null)
       console.log("Updating relationship:", editingRelationship.id, relationshipData)
-      
       await updateRelationship(editingRelationship.id, relationshipData)
       await loadRelationships() // Reload relationships
       setEditingRelationship(null)
-      
-      // Add history entry to handle back button
-      window.history.pushState(null, null, window.location.pathname);
     } catch (err) {
       console.error('Error updating relationship:', err)
       setError(err.message)
@@ -129,7 +127,7 @@ const RelationshipModal = ({ person, people, onClose, onAddPerson }) => {
     const familyTypes = ['father', 'mother', 'son', 'daughter', 'brother', 'sister', 'grandfather', 'grandmother', 'grandson', 'granddaughter', 'uncle', 'aunt', 'nephew', 'niece', 'husband', 'wife']
     const friendTypes = ['friend']
     const workTypes = ['colleague', 'boss', 'employee']
-    
+
     if (familyTypes.includes(type)) return FiHome
     if (friendTypes.includes(type)) return FiHeart
     if (workTypes.includes(type)) return FiBriefcase
@@ -148,14 +146,13 @@ const RelationshipModal = ({ person, people, onClose, onAddPerson }) => {
         const otherPerson = people.find(p => p.id === otherPersonId)
         if (otherPerson) otherPersonName = otherPerson.name
       }
-      
+
       // CRITICAL FIX: Get the correct relationship type from the current person's perspective
       // If this person is person_A, we want relationship_type_b (what person_B is to person_A)
       // If this person is person_B, we want relationship_type (what person_A is to person_B)
-      const relationshipType = isPersonA 
-        ? (rel.relationship_type_b || rel.relationship_type) // What person B is to person A
-        : rel.relationship_type // What person A is to person B
-      
+      const relationshipType = isPersonA ? (rel.relationship_type_b || rel.relationship_type) // What person B is to person A
+                                         : rel.relationship_type // What person A is to person B
+
       console.log(`RelationshipModal display for ${person.name}:`, {
         isPersonA,
         otherPersonName,
@@ -193,9 +190,6 @@ const RelationshipModal = ({ person, people, onClose, onAddPerson }) => {
       currentRelationshipType: displayRel.type,
       isPersonA: displayRel.isPersonA
     })
-    
-    // Add history entry to handle back button
-    window.history.pushState(null, null, window.location.pathname);
   }
 
   return (
@@ -204,7 +198,9 @@ const RelationshipModal = ({ person, people, onClose, onAddPerson }) => {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4 fixed-modal"
-      onClick={(e) => { if (e.target === e.currentTarget) handleClose() }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleClose()
+      }}
     >
       <AnimatePresence mode="wait">
         {editingRelationship ? (
@@ -216,8 +212,6 @@ const RelationshipModal = ({ person, people, onClose, onAddPerson }) => {
             onSubmit={handleEditRelationship}
             onCancel={() => {
               setEditingRelationship(null)
-              // Add history entry to handle back button
-              window.history.pushState(null, null, window.location.pathname);
             }}
           />
         ) : showForm ? (
@@ -229,8 +223,6 @@ const RelationshipModal = ({ person, people, onClose, onAddPerson }) => {
             onSubmit={handleAddRelationships}
             onCancel={() => {
               setShowForm(false)
-              // Add history entry to handle back button
-              window.history.pushState(null, null, window.location.pathname);
             }}
             onAddPerson={onAddPerson}
           />
@@ -316,8 +308,6 @@ const RelationshipModal = ({ person, people, onClose, onAddPerson }) => {
                 <button
                   onClick={() => {
                     setShowForm(true);
-                    // Add history entry to handle back button
-                    window.history.pushState(null, null, window.location.pathname);
                   }}
                   className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors flex items-center justify-center"
                 >

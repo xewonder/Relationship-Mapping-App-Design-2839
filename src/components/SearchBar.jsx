@@ -6,19 +6,25 @@ const { FiSearch, FiX } = FiIcons
 
 const SearchBar = ({ onSearch, onClear }) => {
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
 
-  // Real-time search effect
+  // Debounce the query to avoid too many API calls
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (query.trim()) {
-        onSearch(query.trim())
-      } else {
-        onClear()
-      }
-    }, 300) // 300ms debounce to avoid too many API calls
+      setDebouncedQuery(query);
+    }, 300)
 
     return () => clearTimeout(timeoutId)
-  }, [query, onSearch, onClear])
+  }, [query])
+
+  // Only trigger search when debounced query changes
+  useEffect(() => {
+    if (debouncedQuery.trim()) {
+      onSearch(debouncedQuery.trim())
+    } else {
+      onClear()
+    }
+  }, [debouncedQuery, onSearch, onClear])
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -32,6 +38,7 @@ const SearchBar = ({ onSearch, onClear }) => {
 
   const handleClear = () => {
     setQuery('')
+    setDebouncedQuery('')
     onClear()
   }
 

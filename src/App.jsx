@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import * as FiIcons from 'react-icons/fi'
 import SafeIcon from './common/SafeIcon'
-import { useAuth } from './hooks/useAuth'
+import { useSimpleAuth } from './hooks/useSimpleAuth'
 import { usePeople, useRelationships } from './hooks/useSupabase'
-import AuthForm from './components/AuthForm'
+import LoginPage from './components/LoginPage'
 import UserProfile from './components/UserProfile'
 import PersonCard from './components/PersonCard'
 import PersonForm from './components/PersonForm'
@@ -16,32 +16,10 @@ import './App.css'
 const { FiUsers, FiPlus, FiRefreshCw, FiFilter, FiMapPin, FiX } = FiIcons
 
 function App() {
-  const {
-    user,
-    loading: authLoading,
-    signUp,
-    signIn,
-    signOut,
-    resetPassword,
-    confirmationState,
-    resendConfirmationEmail,
-    authError,
-    clearAuthError
-  } = useAuth()
-  
-  const {
-    people,
-    loading,
-    error,
-    fetchPeople,
-    searchPeople,
-    addPerson,
-    updatePerson,
-    deletePerson
-  } = usePeople()
-  
+  const { user, loading: authLoading, signOut } = useSimpleAuth()
+  const { people, loading, error, fetchPeople, searchPeople, addPerson, updatePerson, deletePerson } = usePeople()
   const { relationships, fetchRelationships } = useRelationships()
-  
+
   const [showPersonForm, setShowPersonForm] = useState(false)
   const [editingPerson, setEditingPerson] = useState(null)
   const [selectedPerson, setSelectedPerson] = useState(null)
@@ -53,11 +31,23 @@ function App() {
   const [searchLoading, setSearchLoading] = useState(false)
   const [proximityFilter, setProximityFilter] = useState('all')
   const [showFilters, setShowFilters] = useState(false)
+  const [authError, setAuthError] = useState(null)
+  const [searchQuery, setSearchQuery] = useState('') // Track the current search query
+  const [formSubmitError, setFormSubmitError] = useState(null) // New state for form submission errors
+  const [historyState, setHistoryState] = useState({ initialized: false }) // Track history state
 
   // Force a refresh by incrementing the trigger
   const triggerDataRefresh = () => {
-    setDataRefreshTrigger(prev => prev + 1);
+    setDataRefreshTrigger(prev => prev + 1)
   }
+
+  // Safe history push state - prevent multiple calls
+  const safelyAddHistoryEntry = useCallback(() => {
+    if (!historyState.initialized) {
+      window.history.pushState({ page: 'main' }, '', window.location.pathname)
+      setHistoryState({ initialized: true })
+    }
+  }, [historyState])
 
   // Fetch people and relationships when user is authenticated or refresh is triggered
   useEffect(() => {
@@ -65,40 +55,45 @@ function App() {
       fetchPeople()
       fetchAllRelationships()
     }
-  }, [user, dataRefreshTrigger]) // Add dataRefreshTrigger as dependency
+  }, [user, dataRefreshTrigger])
 
-  // Prevent Android back button from exiting the app
+  // Initialize history state only once when component mounts
+  useEffect(() => {
+    safelyAddHistoryEntry()
+  }, [safelyAddHistoryEntry])
+
+  // Prevent Android back button from exiting the app - with optimized history handling
   useEffect(() => {
     const handleBackButton = (e) => {
-      e.preventDefault();
+      // Don't prevent the default action, but handle our app state
       
       // If modal is open, close it
       if (showPersonForm) {
-        setShowPersonForm(false);
-        setEditingPerson(null);
-        return;
+        e.preventDefault() // Only prevent default when we're handling it
+        setShowPersonForm(false)
+        setEditingPerson(null)
+        return
       }
-      
+
       if (selectedPerson) {
-        setSelectedPerson(null);
-        return;
+        e.preventDefault() // Only prevent default when we're handling it
+        setSelectedPerson(null)
+        return
       }
-      
+
       // If on main screen, show exit confirmation
-      if (user) {
-        setShowExitWarning(true);
+      if (user && !showExitWarning) {
+        e.preventDefault() // Only prevent default when we're handling it
+        setShowExitWarning(true)
       }
-    };
-    
-    window.addEventListener('popstate', handleBackButton);
-    
-    // Add history entry to make back button trigger our handler
-    window.history.pushState(null, null, window.location.pathname);
+    }
+
+    window.addEventListener('popstate', handleBackButton)
     
     return () => {
-      window.removeEventListener('popstate', handleBackButton);
-    };
-  }, [user, showPersonForm, selectedPerson]);
+      window.removeEventListener('popstate', handleBackButton)
+    }
+  }, [user, showPersonForm, selectedPerson, showExitWarning])
 
   const fetchAllRelationships = async () => {
     try {
@@ -112,28 +107,25 @@ function App() {
 
   const getPersonRelationships = (personId) => {
     return allRelationships.filter(rel => 
-      rel.person_a_id === personId || rel.person_b_id === personId
+      rel.person_a_id === personId || rel.person_b_id === personId 
     )
   }
 
-  const handleAuth = async (type, credentials) => {
-    clearAuthError();
-    try {
-      if (type === 'login') {
-        await signIn(credentials)
-      } else if (type === 'register') {
-        await signUp(credentials)
-      } else if (type === 'forgot') {
-        await resetPassword(credentials)
-      }
-    } catch (error) {
-      console.error(`Auth error (${type}):`, error);
-      // Error is handled in useAuth hook
-    }
+  const handleAuthSuccess = (user) => {
+    console.log('Authentication successful:', user)
+    setAuthError(null)
+    // The useSimpleAuth hook will handle setting the user state
+  }
+
+  const handleAuthError = (error) => {
+    console.error('Authentication error:', error)
+    setAuthError(error.message)
   }
 
   const handlePersonSubmit = async (personData) => {
     try {
+      setFormSubmitError(null) // Clear previous errors
+      
       if (editingPerson) {
         await updatePerson(editingPerson.id, personData)
       } else {
@@ -144,22 +136,22 @@ function App() {
       setEditingPerson(null)
       
       // Trigger refresh of all data
-      triggerDataRefresh();
-      
-      // Add history entry to prevent immediate back button exit
-      window.history.pushState(null, null, window.location.pathname);
+      triggerDataRefresh()
     } catch (error) {
       console.error('Error saving person:', error)
+      setFormSubmitError(error.message || 'Failed to save person')
+      // We're not closing the form - user can retry
+      return false
     }
+    return true
   }
 
   const handlePersonDelete = async (personId) => {
     if (window.confirm('Are you sure you want to delete this person? This will also remove all their relationships.')) {
       try {
         await deletePerson(personId)
-        
         // Trigger refresh of all data
-        triggerDataRefresh();
+        triggerDataRefresh()
       } catch (error) {
         console.error('Error deleting person:', error)
       }
@@ -169,10 +161,8 @@ function App() {
   const handleAddPersonFromRelationship = async (personData) => {
     try {
       const newPerson = await addPerson(personData)
-      
       // Trigger refresh of all data
-      triggerDataRefresh();
-      
+      triggerDataRefresh()
       return newPerson
     } catch (error) {
       console.error('Error adding person from relationship:', error)
@@ -181,10 +171,11 @@ function App() {
   }
 
   const handleSearch = async (query) => {
-    if (query.trim()) {
+    // Only perform search if query is different from current one
+    if (query !== searchQuery) {
+      setSearchQuery(query)
       setIsSearching(true)
       setSearchLoading(true)
-      
       try {
         const results = await searchPeople(query)
         setSearchResults(results)
@@ -194,85 +185,79 @@ function App() {
       } finally {
         setSearchLoading(false)
       }
-    } else {
-      setSearchResults([])
-      setIsSearching(false)
-      setSearchLoading(false)
     }
   }
 
   const handleClearSearch = () => {
+    setSearchQuery('')
     setSearchResults([])
     setIsSearching(false)
     setSearchLoading(false)
   }
 
   const handleExitConfirm = () => {
-    setShowExitWarning(false);
-    window.close(); // Attempt to close the window
-  };
+    setShowExitWarning(false)
+    window.close() // Attempt to close the window
+  }
 
   const handleExitCancel = () => {
-    setShowExitWarning(false);
-    // Add a new history entry to prevent immediate re-trigger
-    window.history.pushState(null, null, window.location.pathname);
-  };
+    setShowExitWarning(false)
+    // We don't need to add history entry here anymore
+  }
 
   // Handler for when relationship modal closes - refresh data
   const handleRelationshipModalClose = () => {
-    setSelectedPerson(null);
-    triggerDataRefresh();
-    // Add history entry to prevent immediate back button exit
-    window.history.pushState(null, null, window.location.pathname);
-  };
+    setSelectedPerson(null)
+    triggerDataRefresh()
+  }
 
   // Handle proximity filter change and trigger refresh
   const handleProximityFilterChange = (value) => {
-    setProximityFilter(value);
+    setProximityFilter(value)
     // Force a re-render by setting a new array reference for displayedPeople
     // This ensures the cards re-sort immediately
     if (isSearching) {
-      setSearchResults([...searchResults]);
+      setSearchResults([...searchResults])
     }
-  };
+  }
 
   // Filter people by proximity
   const getFilteredPeople = () => {
-    let filtered = isSearching ? searchResults : people;
+    let filtered = isSearching ? searchResults : people
     
     if (proximityFilter !== 'all') {
       // FIXED: Make case-insensitive comparison for proximity filter
-      const filterValue = proximityFilter.charAt(0).toUpperCase() + proximityFilter.slice(1).toLowerCase();
+      const filterValue = proximityFilter.charAt(0).toUpperCase() + proximityFilter.slice(1).toLowerCase()
       filtered = filtered.filter(p => {
-        const personProximity = p.proximity || 'Medium';
-        return personProximity === filterValue;
-      });
+        const personProximity = p.proximity || 'Medium'
+        return personProximity === filterValue
+      })
     }
     
     // Sort by proximity (Close first, then Medium, then Far)
     return filtered.sort((a, b) => {
       const proximityOrder = {
-        Close: 1,
-        Medium: 2,
-        Far: 3
-      };
-      const aOrder = proximityOrder[a.proximity || 'Medium'] || 2;
-      const bOrder = proximityOrder[b.proximity || 'Medium'] || 2;
-      return aOrder - bOrder;
-    });
-  };
+        'Close': 1,
+        'Medium': 2,
+        'Far': 3
+      }
+      const aOrder = proximityOrder[a.proximity || 'Medium'] || 2
+      const bOrder = proximityOrder[b.proximity || 'Medium'] || 2
+      return aOrder - bOrder
+    })
+  }
 
   // Compute filtered and sorted people list - will re-compute when dependencies change
-  const displayedPeople = getFilteredPeople();
+  const displayedPeople = getFilteredPeople()
 
   const getProximityColor = (proximity) => {
     switch ((proximity || '').toLowerCase()) {
-      case 'close': return 'bg-green-100 text-green-700 border-green-200';
-      case 'medium': return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-      case 'far': return 'bg-blue-100 text-blue-700 border-blue-200';
-      default: return 'bg-gray-100 text-gray-700 border-gray-200';
+      case 'close': return 'bg-green-100 text-green-700 border-green-200'
+      case 'medium': return 'bg-yellow-100 text-yellow-700 border-yellow-200'
+      case 'far': return 'bg-blue-100 text-blue-700 border-blue-200'
+      default: return 'bg-gray-100 text-gray-700 border-gray-200'
     }
-  };
+  }
 
   if (authLoading) {
     return (
@@ -286,14 +271,7 @@ function App() {
   }
 
   if (!user) {
-    return (
-      <AuthForm 
-        onAuth={handleAuth} 
-        confirmationState={confirmationState} 
-        onResendConfirmation={resendConfirmationEmail}
-        authError={authError}
-      />
-    )
+    return <LoginPage onAuthSuccess={handleAuthSuccess} onAuthError={handleAuthError} authError={authError} />
   }
 
   return (
@@ -305,6 +283,7 @@ function App() {
               <SafeIcon icon={FiUsers} className="text-2xl sm:text-3xl text-blue-600" />
               <h1 className="text-2xl sm:text-3xl font-bold text-gray-800">Relationship Tracker</h1>
             </div>
+
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => setShowFilters(!showFilters)}
@@ -320,9 +299,7 @@ function App() {
               </button>
 
               <button
-                onClick={() => {
-                  triggerDataRefresh();
-                }}
+                onClick={() => { triggerDataRefresh() }}
                 disabled={loading}
                 className="bg-gray-600 text-white px-3 py-2 rounded-lg hover:bg-gray-700 transition-colors disabled:opacity-50 flex items-center space-x-1"
               >
@@ -332,9 +309,8 @@ function App() {
 
               <button
                 onClick={() => {
-                  setShowPersonForm(true);
-                  // Add history entry to handle back button
-                  window.history.pushState(null, null, window.location.pathname);
+                  setShowPersonForm(true)
+                  setFormSubmitError(null) // Clear any previous errors
                 }}
                 className="bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-1"
               >
@@ -370,9 +346,7 @@ function App() {
                           onClick={() => handleProximityFilterChange(option)}
                           className={`px-2 py-1 rounded-md text-xs font-medium capitalize transition-colors ${
                             proximityFilter === option
-                              ? option === 'all'
-                                ? 'bg-gray-700 text-white'
-                                : getProximityColor(option)
+                              ? option === 'all' ? 'bg-gray-700 text-white' : getProximityColor(option)
                               : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                           }`}
                         >
@@ -399,6 +373,13 @@ function App() {
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
             <p className="text-red-800">Error: {error}</p>
+          </div>
+        )}
+
+        {/* Form Submit Error */}
+        {formSubmitError && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+            <p className="text-red-800">Form Error: {formSubmitError}</p>
           </div>
         )}
 
@@ -448,14 +429,11 @@ function App() {
                 onEdit={(person) => {
                   setEditingPerson(person)
                   setShowPersonForm(true)
-                  // Add history entry to handle back button
-                  window.history.pushState(null, null, window.location.pathname);
+                  setFormSubmitError(null) // Clear any previous errors
                 }}
                 onDelete={handlePersonDelete}
                 onViewRelationships={(person) => {
-                  setSelectedPerson(person);
-                  // Add history entry to handle back button
-                  window.history.pushState(null, null, window.location.pathname);
+                  setSelectedPerson(person)
                 }}
               />
             ))}
@@ -510,8 +488,7 @@ function App() {
               onCancel={() => {
                 setShowPersonForm(false)
                 setEditingPerson(null)
-                // Add history entry to prevent immediate back button exit
-                window.history.pushState(null, null, window.location.pathname);
+                setFormSubmitError(null)
               }}
             />
           </motion.div>
